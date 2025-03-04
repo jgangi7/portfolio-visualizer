@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -13,7 +12,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { StockPosition } from '../types/stock';
-import { getTextColorByPercentage, getBackgroundColorByPercentage } from '../utils/colorScale';
+import { useColorScale } from '../utils/colorScale';
 
 interface StockListProps {
   positions: StockPosition[];
@@ -22,16 +21,7 @@ interface StockListProps {
 }
 
 const StockList = ({ positions, onRemove, loading = false }: StockListProps) => {
-  useEffect(() => {
-    const fetchStockPrices = async () => {
-      // We'll implement real-time price updates here using a free API
-      // For now, this is a placeholder
-    };
-
-    if (positions.length > 0) {
-      fetchStockPrices();
-    }
-  }, [positions]);
+  const { getTextColorByPercentage, getBackgroundColorByPercentage } = useColorScale();
 
   if (positions.length === 0) {
     return (
@@ -146,7 +136,8 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
                       fontWeight: 'bold',
                       color: textColor,
                       bgcolor: bgColor,
-                      transition: 'background-color 0.3s ease',
+                      transition: 'all 0.3s ease',
+                      borderRadius: 1,
                     }}
                   >
                     {formatPercentage(gainLossPercentage)}
