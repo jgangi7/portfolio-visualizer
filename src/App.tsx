@@ -8,6 +8,9 @@ import { updatePositionPrices, getRemainingCalls, getMinutesUntilReset } from '.
 import { ThemeProvider, useThemeContext } from './context/ThemeContext';
 import ThemeSwitch from './components/ThemeSwitch';
 import { parsePortfolioCSV } from './utils/csvParser';
+import PortfolioCloud from './components/PortfolioCloud';
+import SectorAssignmentDialog from './components/SectorAssignmentDialog';
+import { getSector } from './utils/sectorMap';
 
 const POSITIONS_KEY = 'portfolio_positions';
 
@@ -25,6 +28,8 @@ const AppContent = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
+  const [pendingPositions, setPendingPositions] = useState<{ known: StockPosition[]; unknown: StockPosition[] }>({ known: [], unknown: [] });
   const shouldUpdate = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -154,29 +159,66 @@ const AppContent = () => {
         return;
       }
 
-      // Merge with existing — skip duplicates
+      // Deduplicate against current portfolio
       setPositions(prev => {
         const existing = new Set(prev.map(p => p.ticker));
         const newOnes = parsed.filter(p => !existing.has(p.ticker));
         const dupes = parsed.filter(p => existing.has(p.ticker)).map(p => p.ticker);
 
-        const allSkipped = [...skipped, ...dupes];
-        if (newOnes.length > 0) {
+        if (newOnes.length === 0) {
+          setErrorMsg(`All positions already exist in your portfolio. Skipped: ${dupes.join(', ')}.`);
+          return prev;
+        }
+
+        // Split into recognized (in sector map) vs unknown
+        const known   = newOnes.filter(p => getSector(p.ticker) !== 'Other');
+        const unknown = newOnes.filter(p => getSector(p.ticker) === 'Other');
+
+        if (unknown.length > 0) {
+          // Stash everything and open the sector assignment dialog
+          setPendingPositions({ known, unknown });
+          setSectorDialogOpen(true);
+          // Success/skipped msg will be shown after dialog confirms
+          if (dupes.length > 0) {
+            setErrorMsg(`Skipped duplicates: ${dupes.join(', ')}.`);
+          }
+        } else {
+          // All recognized — add directly
+          shouldUpdate.current = false;
+          const allSkipped = [...skipped, ...dupes];
           let msg = `Imported ${newOnes.length} position${newOnes.length !== 1 ? 's' : ''}.`;
           if (allSkipped.length > 0) msg += ` Skipped: ${allSkipped.join(', ')}.`;
           setSuccessMsg(msg);
-          shouldUpdate.current = false; // prices are already in the CSV
-        } else {
-          setErrorMsg(`All positions already exist in your portfolio. Skipped: ${dupes.join(', ')}.`);
+          return [...prev, ...newOnes];
         }
 
-        return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+        return prev; // dialog will handle the actual state update
       });
     };
 
     reader.readAsText(file);
     // Reset so the same file can be re-imported if needed
     e.target.value = '';
+  };
+
+  const handleSectorConfirm = (assignedUnknown: StockPosition[]) => {
+    setSectorDialogOpen(false);
+    const toAdd = [...pendingPositions.known, ...assignedUnknown];
+    shouldUpdate.current = false;
+    setPositions(prev => [...prev, ...toAdd]);
+    setSuccessMsg(`Imported ${toAdd.length} position${toAdd.length !== 1 ? 's' : ''}.`);
+    setPendingPositions({ known: [], unknown: [] });
+  };
+
+  const handleSectorCancel = () => {
+    // Add known positions even if user cancels unknown sector assignment
+    if (pendingPositions.known.length > 0) {
+      shouldUpdate.current = false;
+      setPositions(prev => [...prev, ...pendingPositions.known]);
+      setSuccessMsg(`Imported ${pendingPositions.known.length} position${pendingPositions.known.length !== 1 ? 's' : ''}. Unrecognized tickers were skipped.`);
+    }
+    setSectorDialogOpen(false);
+    setPendingPositions({ known: [], unknown: [] });
   };
 
   return (
@@ -207,6 +249,12 @@ const AppContent = () => {
         accept=".csv,.tsv,.txt"
         style={{ display: 'none' }}
         onChange={handleFileImport}
+      />
+      <SectorAssignmentDialog
+        open={sectorDialogOpen}
+        positions={pendingPositions.unknown}
+        onConfirm={handleSectorConfirm}
+        onCancel={handleSectorCancel}
       />
       <Box
         sx={{ 
@@ -304,6 +352,21 @@ const AppContent = () => {
               </Box>
             </Paper>
           </Box>
+
+          {/* 3D Cloud — full width below the two-column grid */}
+          <Paper
+            elevation={3}
+            sx={{
+              mt: { xs: 3, sm: 4 },
+              p: { xs: 3, sm: 4 },
+              width: '100%',
+              border: 1,
+              borderColor: 'divider',
+              boxSizing: 'border-box',
+            }}
+          >
+            <PortfolioCloud positions={positions} />
+          </Paper>
         </Container>
       </Box>
     </MuiThemeProvider>
