@@ -165,7 +165,16 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
                   sx={{ '&:hover': { bgcolor: 'action.hover' } }}
                 >
                   <TableCell sx={{ fontWeight: 'bold', color: textColor }}>
-                    {position.ticker}
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(position.ticker)}+stock`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                      onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                      onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                    >
+                      {position.ticker}
+                    </a>
                   </TableCell>
                   <TableCell align="right">
                     {position.shares.toLocaleString(undefined, { minimumFractionDigits: 2 })}
