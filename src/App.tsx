@@ -5,18 +5,17 @@ import StockForm from './components/StockForm';
 import StockList from './components/StockList';
 import PortfolioChart from './components/PortfolioChart';
 import { updatePositionPrices, getRemainingCalls, getMinutesUntilReset } from './services/stockService';
-import { ThemeProvider, useThemeContext } from './context/ThemeContext';
-import ThemeSwitch from './components/ThemeSwitch';
+import { ThemeProvider } from './context/ThemeContext';
 import { parsePortfolioCSV } from './utils/csvParser';
 import PortfolioCloud from './components/PortfolioCloud';
 import SectorAssignmentDialog from './components/SectorAssignmentDialog';
+import ChatWindow from './components/ChatWindow';
 import { getSector } from './utils/sectorMap';
 
 const POSITIONS_KEY = 'portfolio_positions';
 
 
 const AppContent = () => {
-  const { isDarkMode } = useThemeContext();
   const [positions, setPositions] = useState<StockPosition[]>(() => {
     try {
       const stored = localStorage.getItem(POSITIONS_KEY);
@@ -75,13 +74,13 @@ const AppContent = () => {
       },
     },
     palette: {
-      mode: isDarkMode ? 'dark' : 'light',
+      mode: 'dark',
       primary: {
-        main: isDarkMode ? '#90caf9' : '#1976d2',
+        main: '#90caf9',
       },
       background: {
-        default: isDarkMode ? '#121212' : '#f5f5f5',
-        paper: isDarkMode ? '#1e1e1e' : '#ffffff',
+        default: '#121212',
+        paper: '#1e1e1e',
       },
     },
     components: {
@@ -266,13 +265,8 @@ const AppContent = () => {
           py: { xs: 3, sm: 4 },
           px: { xs: 2, sm: 4 },
           boxSizing: 'border-box',
-          overflowX: 'hidden',
         }}
       >
-        <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
-          <ThemeSwitch />
-        </Box>
-
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 3, sm: 4 } }}>
           <Paper elevation={3} sx={{ p: { xs: 3, sm: 4 }, border: 1, borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
@@ -297,6 +291,7 @@ const AppContent = () => {
             <PortfolioCloud positions={positions} />
           </Paper>
         </Box>
+        <ChatWindow positions={positions} />
       </Box>
     </MuiThemeProvider>
   );
