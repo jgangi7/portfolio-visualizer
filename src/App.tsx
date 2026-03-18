@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Container, Paper, Box, ThemeProvider as MuiThemeProvider, createTheme, Snackbar, Alert, Button } from '@mui/material';
+import { Container, Paper, Box, ThemeProvider as MuiThemeProvider, createTheme, Snackbar, Alert, Button, Tooltip } from '@mui/material';
 import { StockPosition } from './types/stock';
 import StockForm from './components/StockForm';
 import StockList from './components/StockList';
@@ -7,6 +7,7 @@ import PortfolioChart from './components/PortfolioChart';
 import { updatePositionPrices, getRemainingCalls, getMinutesUntilReset } from './services/stockService';
 import { ThemeProvider, useThemeContext } from './context/ThemeContext';
 import ThemeSwitch from './components/ThemeSwitch';
+import { parsePortfolioCSV } from './utils/csvParser';
 
 const POSITIONS_KEY = 'portfolio_positions';
 
@@ -37,7 +38,9 @@ const AppContent = () => {
   });
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const shouldUpdate = useRef(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const theme = createTheme({
     typography: {
@@ -156,6 +159,45 @@ const AppContent = () => {
     setPositions(TEST_POSITIONS);
   };
 
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      const { positions: parsed, skipped } = parsePortfolioCSV(content);
+
+      if (parsed.length === 0) {
+        setErrorMsg(skipped[0] || 'No valid positions found in the file.');
+        return;
+      }
+
+      // Merge with existing — skip duplicates
+      setPositions(prev => {
+        const existing = new Set(prev.map(p => p.ticker));
+        const newOnes = parsed.filter(p => !existing.has(p.ticker));
+        const dupes = parsed.filter(p => existing.has(p.ticker)).map(p => p.ticker);
+
+        const allSkipped = [...skipped, ...dupes];
+        if (newOnes.length > 0) {
+          let msg = `Imported ${newOnes.length} position${newOnes.length !== 1 ? 's' : ''}.`;
+          if (allSkipped.length > 0) msg += ` Skipped: ${allSkipped.join(', ')}.`;
+          setSuccessMsg(msg);
+          shouldUpdate.current = false; // prices are already in the CSV
+        } else {
+          setErrorMsg(`All positions already exist in your portfolio. Skipped: ${dupes.join(', ')}.`);
+        }
+
+        return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+      });
+    };
+
+    reader.readAsText(file);
+    // Reset so the same file can be re-imported if needed
+    e.target.value = '';
+  };
+
   return (
     <MuiThemeProvider theme={theme}>
       <Snackbar
@@ -168,6 +210,23 @@ const AppContent = () => {
           {errorMsg}
         </Alert>
       </Snackbar>
+      <Snackbar
+        open={!!successMsg}
+        autoHideDuration={5000}
+        onClose={() => setSuccessMsg(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="success" onClose={() => setSuccessMsg(null)} sx={{ width: '100%' }}>
+          {successMsg}
+        </Alert>
+      </Snackbar>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.tsv,.txt"
+        style={{ display: 'none' }}
+        onChange={handleFileImport}
+      />
       <Box
         sx={{ 
           bgcolor: 'background.default',
@@ -221,7 +280,16 @@ const AppContent = () => {
               }}
             >
               <Box sx={{ px: { xs: 1, sm: 2 } }}>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1 }}>
+                  <Tooltip title="Import a CSV/TSV portfolio export (Fidelity format supported)">
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Import CSV
+                    </Button>
+                  </Tooltip>
                   <Button
                     size="small"
                     variant="outlined"
