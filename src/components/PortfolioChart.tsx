@@ -125,7 +125,12 @@ const PortfolioChart = ({ positions }: PortfolioChartProps) => {
     const sign = pct >= 0 ? '+' : '';
 
     return (
-      <g key={name} className="treemap-cell" style={{ cursor: 'default' }}>
+      <g
+        key={name}
+        className="treemap-cell"
+        style={{ cursor: 'pointer' }}
+        onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(name)}+stock`, '_blank', 'noopener,noreferrer')}
+      >
         <rect
           x={x + 1}
           y={y + 1}
