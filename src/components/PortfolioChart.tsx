@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import {
   ResponsiveContainer,
   Treemap,
   Tooltip,
 } from 'recharts';
-import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, useTheme, useMediaQuery, GlobalStyles } from '@mui/material';
 import { StockPosition } from '../types/stock';
 import { useColorScale } from '../utils/colorScale';
 
@@ -18,68 +18,6 @@ interface TreeMapData {
   value: number;
   percentChange: number;
 }
-
-// interface ContentProps {
-//   depth: number;
-//   x: number;
-//   y: number;
-//   width: number;
-//   height: number;
-//   payload: TreeMapData;
-//   name: string;
-// }
-
-// const CustomContent = (props: ContentProps) => {
-//   const { depth, x, y, width, height, payload, name } = props;
-//   const theme = useTheme();
-//   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-//   const { getColorByPercentage } = useColorScale();
-//   const bgColor = getColorByPercentage(payload.percentChange);
-
-//   return (
-//     <g>
-//       <rect
-//         x={x}
-//         y={y}
-//         width={width}
-//         height={height}
-//         style={{
-//           fill: bgColor,
-//           stroke: theme.palette.background.paper,
-//           strokeWidth: 2 / (depth + 1e-10),
-//           strokeOpacity: 1 / (depth + 1e-10),
-//         }}
-//       />
-//       {width > (isMobile ? 40 : 50) && height > (isMobile ? 25 : 30) && (
-//         <>
-//           <text
-//             x={x + width / 2}
-//             y={y + height / 2 - (isMobile ? 6 : 8)}
-//             textAnchor="middle"
-//             fill="#fff"
-//             fontSize={isMobile ? 12 : 14}
-//             style={{ 
-//               fontWeight: 'bold',
-//               textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
-//             }}
-//           >
-//             {name}
-//           </text>
-//           <text
-//             x={x + width / 2}
-//             y={y + height / 2 + (isMobile ? 6 : 8)}
-//             textAnchor="middle"
-//             fill="#fff"
-//             fontSize={isMobile ? 10 : 12}
-//             style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}
-//           >
-//             ${payload.value.toFixed(0)}
-//           </text>
-//         </>
-//       )}
-//     </g>
-//   );
-// };
 
 interface TooltipProps {
   active?: boolean;
@@ -95,33 +33,24 @@ const CustomTooltip = ({ active, payload }: TooltipProps) => {
   if (active && payload && payload.length > 0) {
     const data = payload[0].payload;
     const textColor = getTextColorByPercentage(data.percentChange);
-    
+
     return (
-      <Box 
-        sx={{ 
-          bgcolor: 'background.paper', 
+      <Box
+        sx={{
+          bgcolor: 'background.paper',
           p: 1.5,
-          border: 1, 
+          border: 1,
           borderColor: 'divider',
           borderRadius: 1,
-          boxShadow: theme.shadows[4]
+          boxShadow: theme.shadows[4],
         }}
       >
-        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>{data.name}</Typography>
-        <Typography variant="body2">{`Value: $${data.value.toFixed(2)}`}</Typography>
-        <Typography
-          variant="body2"
-          sx={{ 
-            color: textColor,
-            fontWeight: 'bold'
-          }}
-        >
-          {`Change: ${new Intl.NumberFormat('en-US', {
-            style: 'percent',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-            signDisplay: 'exceptZero',
-          }).format(data.percentChange / 100)}`}
+        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+          {data.name}
+        </Typography>
+        <Typography variant="body2">{`Value: $${data.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</Typography>
+        <Typography variant="body2" sx={{ color: textColor, fontWeight: 'bold' }}>
+          {`${data.percentChange >= 0 ? '+' : ''}${data.percentChange.toFixed(2)}%`}
         </Typography>
       </Box>
     );
@@ -130,42 +59,130 @@ const CustomTooltip = ({ active, payload }: TooltipProps) => {
 };
 
 const PortfolioChart = ({ positions }: PortfolioChartProps) => {
-  const [data, setData] = useState<TreeMapData[]>([]);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { getColorByPercentage } = useColorScale();
 
-  useEffect(() => {
-    const transformData = () => {
-      return positions.map((position) => ({
+  const data = useMemo<TreeMapData[]>(
+    () =>
+      positions.map((position) => ({
         name: position.ticker,
-        size: position.totalValue || position.shares * position.purchasePrice,
-        value: position.totalValue || position.shares * position.purchasePrice,
-        percentChange: position.gainLossPercentage || 0,
-      }));
-    };
+        size: position.totalValue ?? position.shares * position.purchasePrice,
+        value: position.totalValue ?? position.shares * position.purchasePrice,
+        percentChange: position.gainLossPercentage ?? 0,
+      })),
+    [positions]
+  );
 
-    setData(transformData());
-  }, [positions]);
+  // Changing key forces Recharts to remount Treemap when positions change,
+  // since Recharts Treemap doesn't reliably update on data prop changes alone.
+  const treemapKey = positions.map(p => p.ticker).join(',');
+
+  // Custom per-cell renderer — closure captures theme + color fn so no hook violations
+  const renderCell = (props: {
+    depth: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    name: string;
+    percentChange: number;
+  }) => {
+    const { depth, x, y, width, height, name, percentChange } = props;
+
+    // depth 0 = invisible root container; depth 1 = actual data cells
+    if (depth !== 1) return <g key="root" />;
+
+    const bgColor = getColorByPercentage(percentChange ?? 0);
+    const borderColor = theme.palette.background.default;
+    const cx = x + width / 2;
+    const cy = y + height / 2;
+    const fontFamily = 'Inter, -apple-system, BlinkMacSystemFont, sans-serif';
+
+    // Pick clean font sizes based on block area, constrained by width
+    const area = width * height;
+    let tickerSize: number;
+    let pctSize: number;
+    if (area > 15000)      { tickerSize = 16; pctSize = 12; }
+    else if (area > 6000)  { tickerSize = 14; pctSize = 11; }
+    else if (area > 2000)  { tickerSize = 12; pctSize = 10; }
+    else                   { tickerSize = 10; pctSize = 9;  }
+    // Never wider than the block
+    tickerSize = Math.min(tickerSize, Math.floor(width / 3.5));
+    pctSize    = Math.min(pctSize,    Math.floor(width / 4.5));
+
+    const showTicker  = width > 36 && height > 22 && tickerSize >= 8;
+    const showPercent = width > 48 && height > 42 && pctSize >= 8;
+
+    // Vertically center the text group as a unit
+    const gap = 4;
+    const tickerY = showPercent
+      ? cy - (gap + pctSize) / 2
+      : cy;
+    const pctY = cy + (tickerSize + gap) / 2;
+
+    const pct = percentChange ?? 0;
+    const sign = pct >= 0 ? '+' : '';
+
+    return (
+      <g key={name} className="treemap-cell" style={{ cursor: 'default' }}>
+        <rect
+          x={x + 1}
+          y={y + 1}
+          width={width - 2}
+          height={height - 2}
+          style={{ fill: bgColor, stroke: borderColor, strokeWidth: 2 }}
+        />
+        {showTicker && (
+          <text
+            x={cx}
+            y={tickerY}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="treemap-ticker"
+            fill="rgba(0,0,0,0.87)"
+            fontSize={tickerSize}
+            fontWeight="700"
+            fontFamily={fontFamily}
+            letterSpacing="0.04em"
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            {name}
+          </text>
+        )}
+        {showPercent && (
+          <text
+            x={cx}
+            y={pctY}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="treemap-pct"
+            fill="rgba(0,0,0,0.6)"
+            fontSize={pctSize}
+            fontWeight="500"
+            fontFamily={fontFamily}
+            style={{ pointerEvents: 'none', userSelect: 'none' }}
+          >
+            {`${sign}${pct.toFixed(1)}%`}
+          </text>
+        )}
+      </g>
+    );
+  };
+
+  const chartHeight = isMobile ? 300 : 460;
 
   if (positions.length === 0) {
     return (
-      <Box 
-        sx={{ 
-          height: '100%',
+      <Box
+        sx={{
+          height: chartHeight,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          minHeight: { xs: '300px', sm: '400px' }
         }}
       >
-        <Typography 
-          variant="body1" 
-          sx={{ 
-            textAlign: 'center',
-            color: 'text.secondary',
-            px: 2
-          }}
-        >
+        <Typography variant="body1" sx={{ textAlign: 'center', color: 'text.secondary', px: 2 }}>
           Add positions to see portfolio visualization.
         </Typography>
       </Box>
@@ -173,24 +190,28 @@ const PortfolioChart = ({ positions }: PortfolioChartProps) => {
   }
 
   return (
-    <Box sx={{ height: '100%', minHeight: { xs: '300px', sm: '400px' } }}>
+    <Box>
+      <GlobalStyles styles={{
+        '.treemap-cell:hover .treemap-ticker': { fill: 'rgba(255,255,255,1)' },
+        '.treemap-cell:hover .treemap-pct':    { fill: 'rgba(255,255,255,0.82)' },
+      }} />
       <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-        Portfolio Allocation
+        Portfolio Map
       </Typography>
-      <Box sx={{ height: 'calc(100% - 40px)', minHeight: { xs: '260px', sm: '360px' } }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <Treemap
-            data={data}
-            dataKey="size"
-            aspectRatio={isMobile ? 1 : 4/3}
-            stroke={theme.palette.background.paper}
-          >
-            <Tooltip content={<CustomTooltip />} />
-          </Treemap>
-        </ResponsiveContainer>
-      </Box>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <Treemap
+          key={treemapKey}
+          data={data}
+          dataKey="size"
+          aspectRatio={isMobile ? 1 : 4 / 3}
+          stroke={theme.palette.background.default}
+          content={renderCell as any}
+        >
+          <Tooltip content={<CustomTooltip />} />
+        </Treemap>
+      </ResponsiveContainer>
     </Box>
   );
 };
 
-export default PortfolioChart; 
+export default PortfolioChart;

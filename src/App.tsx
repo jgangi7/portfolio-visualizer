@@ -1,17 +1,42 @@
 import { useState, useEffect, useRef } from 'react';
-import { Container, Paper, Typography, Box, ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material';
+import { Container, Paper, Box, ThemeProvider as MuiThemeProvider, createTheme, Snackbar, Alert, Button } from '@mui/material';
 import { StockPosition } from './types/stock';
 import StockForm from './components/StockForm';
 import StockList from './components/StockList';
 import PortfolioChart from './components/PortfolioChart';
-import { updatePositionPrices } from './services/stockService';
+import { updatePositionPrices, getRemainingCalls, getMinutesUntilReset } from './services/stockService';
 import { ThemeProvider, useThemeContext } from './context/ThemeContext';
 import ThemeSwitch from './components/ThemeSwitch';
 
+const POSITIONS_KEY = 'portfolio_positions';
+
+const TEST_POSITIONS: StockPosition[] = [
+  { ticker: 'AAPL',  shares: 50,  purchasePrice: 150.00, currentPrice: 211.42, totalValue: 10571.00, gainLoss: 3071.00,  gainLossPercentage: 40.95  },
+  { ticker: 'MSFT',  shares: 30,  purchasePrice: 280.00, currentPrice: 415.30, totalValue: 12459.00, gainLoss: 4059.00,  gainLossPercentage: 48.32  },
+  { ticker: 'NVDA',  shares: 20,  purchasePrice: 500.00, currentPrice: 875.40, totalValue: 17508.00, gainLoss: 7508.00,  gainLossPercentage: 75.08  },
+  { ticker: 'GOOGL', shares: 15,  purchasePrice: 140.00, currentPrice: 168.72, totalValue: 2530.80,  gainLoss: 430.80,   gainLossPercentage: 20.51  },
+  { ticker: 'AMZN',  shares: 25,  purchasePrice: 185.00, currentPrice: 176.50, totalValue: 4412.50,  gainLoss: -212.50,  gainLossPercentage: -4.59  },
+  { ticker: 'META',  shares: 10,  purchasePrice: 320.00, currentPrice: 511.90, totalValue: 5119.00,  gainLoss: 1919.00,  gainLossPercentage: 59.97  },
+  { ticker: 'TSLA',  shares: 40,  purchasePrice: 250.00, currentPrice: 178.20, totalValue: 7128.00,  gainLoss: -2872.00, gainLossPercentage: -28.72 },
+  { ticker: 'JPM',   shares: 35,  purchasePrice: 195.00, currentPrice: 208.40, totalValue: 7294.00,  gainLoss: 469.00,   gainLossPercentage: 6.87   },
+  { ticker: 'BAC',   shares: 100, purchasePrice: 38.00,  currentPrice: 32.10,  totalValue: 3210.00,  gainLoss: -590.00,  gainLossPercentage: -15.53 },
+  { ticker: 'XOM',   shares: 45,  purchasePrice: 110.00, currentPrice: 114.80, totalValue: 5166.00,  gainLoss: 216.00,   gainLossPercentage: 4.36   },
+  { ticker: 'WMT',   shares: 20,  purchasePrice: 60.00,  currentPrice: 97.30,  totalValue: 1946.00,  gainLoss: 746.00,   gainLossPercentage: 62.17  },
+  { ticker: 'INTC',  shares: 80,  purchasePrice: 45.00,  currentPrice: 22.40,  totalValue: 1792.00,  gainLoss: -1808.00, gainLossPercentage: -50.22 },
+];
+
 const AppContent = () => {
   const { isDarkMode } = useThemeContext();
-  const [positions, setPositions] = useState<StockPosition[]>([]);
+  const [positions, setPositions] = useState<StockPosition[]>(() => {
+    try {
+      const stored = localStorage.getItem(POSITIONS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const shouldUpdate = useRef(true);
 
   const theme = createTheme({
@@ -77,20 +102,32 @@ const AppContent = () => {
     },
   });
 
+  // Persist positions to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(POSITIONS_KEY, JSON.stringify(positions));
+  }, [positions]);
+
   useEffect(() => {
     const updatePrices = async () => {
       if (positions.length === 0 || !shouldUpdate.current) return;
-      
+
+      const remaining = getRemainingCalls();
+      if (remaining === 0) {
+        const minutes = getMinutesUntilReset();
+        setErrorMsg(`API rate limit reached (5/hour). Showing cached prices. Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
+        return;
+      }
+
       try {
         shouldUpdate.current = false;
         setLoading(true);
         const updatedPositions = await updatePositionPrices(positions);
         setPositions(updatedPositions);
       } catch (error) {
-        console.error('Failed to update prices:', error);
+        const msg = error instanceof Error ? error.message : 'Failed to update prices.';
+        setErrorMsg(msg);
       } finally {
         setLoading(false);
-        // Allow next update after 5 minutes
         setTimeout(() => {
           shouldUpdate.current = true;
         }, 5 * 60 * 1000);
@@ -98,21 +135,40 @@ const AppContent = () => {
     };
 
     updatePrices();
-  }, [positions.length]); // Only run when the number of positions changes
+  }, [positions.length]);
 
   const addPosition = (newPosition: StockPosition) => {
-    shouldUpdate.current = true; // Allow update when new position is added
-    setPositions([...positions, newPosition]);
+    const duplicate = positions.some(p => p.ticker === newPosition.ticker);
+    if (duplicate) {
+      setErrorMsg(`${newPosition.ticker} is already in your portfolio.`);
+      return;
+    }
+    shouldUpdate.current = true;
+    setPositions(prev => [...prev, newPosition]);
   };
 
   const removePosition = (ticker: string) => {
-    shouldUpdate.current = true; // Allow update when position is removed
-    setPositions(positions.filter(position => position.ticker !== ticker));
+    setPositions(prev => prev.filter(p => p.ticker !== ticker));
+  };
+
+  const loadTestData = () => {
+    shouldUpdate.current = false; // skip API calls — data is already populated
+    setPositions(TEST_POSITIONS);
   };
 
   return (
     <MuiThemeProvider theme={theme}>
-      <Box 
+      <Snackbar
+        open={!!errorMsg}
+        autoHideDuration={6000}
+        onClose={() => setErrorMsg(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="error" onClose={() => setErrorMsg(null)} sx={{ width: '100%' }}>
+          {errorMsg}
+        </Alert>
+      </Snackbar>
+      <Box
         sx={{ 
           bgcolor: 'background.default',
           minHeight: '100vh',
@@ -142,23 +198,7 @@ const AppContent = () => {
             boxSizing: 'border-box',
           }}
         >
-          <Typography 
-            variant="h3" 
-            component="h1" 
-            gutterBottom 
-            sx={{ 
-              color: 'primary.main', 
-              textAlign: 'center',
-              fontSize: { xs: '2.5rem', sm: '3rem', md: '3.5rem' },
-              mb: { xs: 4, sm: 5 },
-              transition: 'color 0.3s ease',
-              textShadow: isDarkMode ? '0 0 20px rgba(144, 202, 249, 0.2)' : 'none',
-            }}
-          >
-            Portfolio Visualizer
-          </Typography>
-          
-          <Box sx={{ 
+         <Box sx={{ 
             display: 'grid', 
             gap: { xs: 3, sm: 4 }, 
             gridTemplateColumns: { 
@@ -181,6 +221,16 @@ const AppContent = () => {
               }}
             >
               <Box sx={{ px: { xs: 1, sm: 2 } }}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    onClick={loadTestData}
+                  >
+                    Load Test Data
+                  </Button>
+                </Box>
                 <StockForm onSubmit={addPosition} />
                 <Box 
                   sx={{ 

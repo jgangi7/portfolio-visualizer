@@ -4,7 +4,49 @@ import { DailyStockData, StockPosition } from '../types/stock';
 const API_KEY = import.meta.env.VITE_ALPHA_VANTAGE_API_KEY;
 const BASE_URL = 'https://www.alphavantage.co/query';
 
-// Queue system for API calls
+// --- Hourly rate limit tracking (5 calls/hour on free tier) ---
+const RATE_LIMIT_KEY = 'av_call_timestamps';
+const MAX_CALLS_PER_HOUR = 5;
+
+function getCallTimestamps(): number[] {
+  try {
+    const stored = localStorage.getItem(RATE_LIMIT_KEY);
+    if (!stored) return [];
+    const timestamps: number[] = JSON.parse(stored);
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    return timestamps.filter(t => t > oneHourAgo);
+  } catch {
+    return [];
+  }
+}
+
+function recordApiCall() {
+  const timestamps = getCallTimestamps();
+  timestamps.push(Date.now());
+  localStorage.setItem(RATE_LIMIT_KEY, JSON.stringify(timestamps));
+}
+
+export function getRemainingCalls(): number {
+  return Math.max(0, MAX_CALLS_PER_HOUR - getCallTimestamps().length);
+}
+
+export function getMinutesUntilReset(): number {
+  const timestamps = getCallTimestamps();
+  if (timestamps.length < MAX_CALLS_PER_HOUR) return 0;
+  const oldest = Math.min(...timestamps);
+  const resetTime = oldest + 60 * 60 * 1000;
+  return Math.ceil((resetTime - Date.now()) / 60000);
+}
+
+function checkRateLimit() {
+  const timestamps = getCallTimestamps();
+  if (timestamps.length >= MAX_CALLS_PER_HOUR) {
+    const minutes = getMinutesUntilReset();
+    throw new Error(`API rate limit reached (5/hour). Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
+  }
+}
+
+// Queue system for API calls (sequential, no artificial delay needed — limit is hourly)
 class ApiQueue {
   private queue: (() => Promise<void>)[] = [];
   private processing = false;
@@ -22,8 +64,6 @@ class ApiQueue {
       const task = this.queue.shift();
       if (task) {
         await task();
-        // Alpha Vantage free tier allows 5 API calls per minute
-        await new Promise(resolve => setTimeout(resolve, 15000)); // 15 seconds between calls
       }
     }
     this.processing = false;
@@ -36,6 +76,8 @@ export const fetchStockPrice = async (ticker: string): Promise<number> => {
   return new Promise((resolve, reject) => {
     apiQueue.add(async () => {
       try {
+        checkRateLimit();
+
         const response = await axios.get(BASE_URL, {
           params: {
             function: 'GLOBAL_QUOTE',
@@ -45,20 +87,18 @@ export const fetchStockPrice = async (ticker: string): Promise<number> => {
           timeout: 10000,
         });
 
-        // Check for API limit message
+        // Check for API limit message from server
         if (response.data.Note) {
-          console.warn('API rate limit message:', response.data.Note);
           throw new Error('API call frequency limit reached');
         }
 
-        // Check for error messages
         if (response.data['Error Message']) {
-          throw new Error(response.data['Error Message']);
+          throw new Error(`Invalid ticker: ${ticker}`);
         }
 
         const quote = response.data['Global Quote'];
         if (!quote || !quote['05. price']) {
-          throw new Error('No price data available');
+          throw new Error(`No price data available for ${ticker}`);
         }
 
         const price = parseFloat(quote['05. price']);
@@ -66,10 +106,9 @@ export const fetchStockPrice = async (ticker: string): Promise<number> => {
           throw new Error('Invalid price value received');
         }
 
-        console.log(`Successfully fetched price for ${ticker}: $${price}`);
+        recordApiCall();
         resolve(price);
       } catch (error) {
-        console.error(`Failed to fetch price for ${ticker}:`, error);
         reject(error);
       }
     });
