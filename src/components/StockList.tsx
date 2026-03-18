@@ -4,6 +4,7 @@ import {
   TableBody,
   TableCell,
   TableContainer,
+  TableFooter,
   TableHead,
   TableRow,
   TableSortLabel,
@@ -38,6 +39,14 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
       setSortDir('asc');
     }
   };
+
+  const summary = useMemo(() => {
+    const totalValue = positions.reduce((s, p) => s + (p.totalValue ?? p.shares * p.purchasePrice), 0);
+    const totalCost = positions.reduce((s, p) => s + p.shares * p.purchasePrice, 0);
+    const gainLoss = totalValue - totalCost;
+    const gainLossPct = totalCost > 0 ? (gainLoss / totalCost) * 100 : 0;
+    return { totalValue, gainLoss, gainLossPct };
+  }, [positions]);
 
   const sorted = useMemo(() => {
     return [...positions].sort((a, b) => {
@@ -199,6 +208,29 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
               );
             })}
           </TableBody>
+          <TableFooter>
+            <TableRow sx={{ '& td': { borderTop: 2, borderColor: 'divider' } }}>
+              <TableCell colSpan={4} sx={{ fontWeight: 700, fontSize: '0.8rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Total
+              </TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>
+                {formatCurrency(summary.totalValue)}
+              </TableCell>
+              <TableCell
+                align="right"
+                sx={{
+                  fontWeight: 700,
+                  color: getTextColorByPercentage(summary.gainLossPct),
+                  bgcolor: getBackgroundColorByPercentage(summary.gainLossPct),
+                  borderRadius: 1,
+                }}
+              >
+                {formatCurrency(summary.gainLoss)}&nbsp;
+                ({summary.gainLossPct >= 0 ? '+' : ''}{summary.gainLossPct.toFixed(2)}%)
+              </TableCell>
+              <TableCell />
+            </TableRow>
+          </TableFooter>
         </Table>
       </TableContainer>
     </Box>
