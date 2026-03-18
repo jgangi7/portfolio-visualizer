@@ -1,4 +1,5 @@
 import { useMemo, useState, Suspense } from 'react';
+import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Html, Grid } from '@react-three/drei';
 import { Box, Typography } from '@mui/material';
@@ -85,6 +86,31 @@ const SectorLabel = ({
   </Html>
 );
 
+// ── Tracer lines between all nodes ───────────────────────────────────────────
+const TracerLines = ({ nodes, isDark }: { nodes: NodeData[]; isDark: boolean }) => {
+  const geometry = useMemo(() => {
+    const pts: number[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        pts.push(...nodes[i].position, ...nodes[j].position);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    return geo;
+  }, [nodes]);
+
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial
+        color={isDark ? '#2a3f6a' : '#8fa8c8'}
+        transparent
+        opacity={isDark ? 0.22 : 0.18}
+      />
+    </lineSegments>
+  );
+};
+
 // ── Scene (inside Canvas) ────────────────────────────────────────────────────
 const Scene = ({
   nodes, activeSectors, isDark, onHover,
@@ -113,6 +139,8 @@ const Scene = ({
       followCamera={false}
       infiniteGrid
     />
+
+    <TracerLines nodes={nodes} isDark={isDark} />
 
     {nodes.map((node) => (
       <StockSphere key={node.ticker} {...node} onHover={onHover} />
