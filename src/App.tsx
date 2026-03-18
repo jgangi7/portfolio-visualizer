@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Container, Paper, Box, ThemeProvider as MuiThemeProvider, createTheme, Snackbar, Alert, Button, Tooltip } from '@mui/material';
+import { Paper, Box, ThemeProvider as MuiThemeProvider, createTheme, Snackbar, Alert, Button, Tooltip } from '@mui/material';
 import { StockPosition } from './types/stock';
 import StockForm from './components/StockForm';
 import StockList from './components/StockList';
@@ -257,17 +257,14 @@ const AppContent = () => {
         onCancel={handleSectorCancel}
       />
       <Box
-        sx={{ 
+        sx={{
           bgcolor: 'background.default',
           minHeight: '100vh',
-          minWidth: '100vw',
           width: '100%',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
           py: { xs: 3, sm: 4 },
-          px: { xs: 2, sm: 3 },
-          transition: 'all 0.3s ease',
+          px: { xs: 2, sm: 4 },
           boxSizing: 'border-box',
           overflowX: 'hidden',
         }}
@@ -275,99 +272,31 @@ const AppContent = () => {
         <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
           <ThemeSwitch />
         </Box>
-        
-        <Container 
-          maxWidth={false} 
-          sx={{ 
-            width: '100%',
-            minWidth: '100%',
-            maxWidth: 'none',
-            px: { xs: 0, sm: 2, md: 3 },
-            boxSizing: 'border-box',
-          }}
-        >
-         <Box sx={{ 
-            display: 'grid', 
-            gap: { xs: 3, sm: 4 }, 
-            gridTemplateColumns: { 
-              xs: '1fr', 
-              lg: '1fr 1fr' 
-            },
-            width: '100%',
-            minWidth: '100%',
-            boxSizing: 'border-box',
-          }}>
-            <Paper 
-              elevation={3} 
-              sx={{ 
-                p: { xs: 3, sm: 4 },
-                height: 'fit-content',
-                transition: 'all 0.3s ease',
-                width: '80%',
-                border: 1,
-                borderColor: 'divider',
-              }}
-            >
-              <Box sx={{ px: { xs: 1, sm: 2 } }}>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-                  <Tooltip title="Import a CSV/TSV portfolio export (Fidelity format supported)">
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Import CSV
-                    </Button>
-                  </Tooltip>
-                </Box>
-                <StockForm onSubmit={addPosition} />
-                <Box 
-                  sx={{ 
-                    mt: 4, 
-                    pt: 4, 
-                    px: { xs: 1, sm: 2 },
-                    borderTop: 1, 
-                    borderColor: 'divider' 
-                  }}
-                >
-                  <StockList positions={positions} onRemove={removePosition} loading={loading} />
-                </Box>
-              </Box>
-            </Paper>
-            
-            <Paper 
-              elevation={3} 
-              sx={{ 
-                p: { xs: 3, sm: 4 },
-                height: 'fit-content',
-                minHeight: { xs: '400px', sm: '500px' },
-                transition: 'all 0.3s ease',
-                width: '80%',
-                border: 1,
-                borderColor: 'divider',
-              }}
-            >
-              <Box sx={{ px: { xs: 1, sm: 2 } }}>
-                <PortfolioChart positions={positions} />
-              </Box>
-            </Paper>
-          </Box>
 
-          {/* 3D Cloud — full width below the two-column grid */}
-          <Paper
-            elevation={3}
-            sx={{
-              mt: { xs: 3, sm: 4 },
-              p: { xs: 3, sm: 4 },
-              width: '100%',
-              border: 1,
-              borderColor: 'divider',
-              boxSizing: 'border-box',
-            }}
-          >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 3, sm: 4 } }}>
+          <Paper elevation={3} sx={{ p: { xs: 3, sm: 4 }, border: 1, borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+              <Tooltip title="Import a CSV/TSV portfolio export (Fidelity format supported)">
+                <Button size="small" variant="outlined" onClick={() => fileInputRef.current?.click()}>
+                  Import CSV
+                </Button>
+              </Tooltip>
+            </Box>
+            <StockForm onSubmit={addPosition} />
+          </Paper>
+
+          <Paper elevation={3} sx={{ p: { xs: 3, sm: 4 }, border: 1, borderColor: 'divider' }}>
+            <StockList positions={positions} onRemove={removePosition} loading={loading} />
+          </Paper>
+
+          <Paper elevation={3} sx={{ p: { xs: 3, sm: 4 }, border: 1, borderColor: 'divider' }}>
+            <PortfolioChart positions={positions} />
+          </Paper>
+
+          <Paper elevation={3} sx={{ p: { xs: 3, sm: 4 }, border: 1, borderColor: 'divider' }}>
             <PortfolioCloud positions={positions} />
           </Paper>
-        </Container>
+        </Box>
       </Box>
     </MuiThemeProvider>
   );
