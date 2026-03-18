@@ -248,6 +248,7 @@ const PortfolioCloud = ({ positions }: PortfolioCloudProps) => {
           camera={{ position: [14, 10, 20], fov: 55 }}
           style={{ background: bgColor }}
           gl={{ antialias: true }}
+          frameloop="always"
         >
           <Suspense fallback={null}>
             <Scene
