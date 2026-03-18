@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -5,6 +6,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   IconButton,
   Typography,
   CircularProgress,
@@ -14,6 +16,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { StockPosition } from '../types/stock';
 import { useColorScale } from '../utils/colorScale';
 
+type SortKey = 'ticker' | 'shares' | 'purchasePrice' | 'currentPrice' | 'totalValue' | 'gainLossPercentage';
+type SortDir = 'asc' | 'desc';
+
 interface StockListProps {
   positions: StockPosition[];
   onRemove: (ticker: string) => void;
@@ -22,6 +27,44 @@ interface StockListProps {
 
 const StockList = ({ positions, onRemove, loading = false }: StockListProps) => {
   const { getTextColorByPercentage, getBackgroundColorByPercentage } = useColorScale();
+  const [sortKey, setSortKey] = useState<SortKey>('ticker');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sorted = useMemo(() => {
+    return [...positions].sort((a, b) => {
+      const aVal = sortKey === 'ticker'
+        ? a.ticker
+        : sortKey === 'currentPrice'
+          ? (a.currentPrice ?? a.purchasePrice)
+          : sortKey === 'totalValue'
+            ? (a.totalValue ?? a.shares * a.purchasePrice)
+            : sortKey === 'gainLossPercentage'
+              ? (a.gainLossPercentage ?? 0)
+              : a[sortKey];
+      const bVal = sortKey === 'ticker'
+        ? b.ticker
+        : sortKey === 'currentPrice'
+          ? (b.currentPrice ?? b.purchasePrice)
+          : sortKey === 'totalValue'
+            ? (b.totalValue ?? b.shares * b.purchasePrice)
+            : sortKey === 'gainLossPercentage'
+              ? (b.gainLossPercentage ?? 0)
+              : b[sortKey];
+
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [positions, sortKey, sortDir]);
 
   if (positions.length === 0) {
     return (
@@ -31,23 +74,27 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
     );
   }
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value);
-  };
 
-  const formatPercentage = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
+  const formatPercentage = (value: number) =>
+    new Intl.NumberFormat('en-US', {
       style: 'percent',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
       signDisplay: 'exceptZero',
     }).format(value / 100);
-  };
+
+  const col = (key: SortKey) => ({
+    active: sortKey === key,
+    direction: sortKey === key ? sortDir : 'asc' as SortDir,
+    onClick: () => handleSort(key),
+  });
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -76,43 +123,46 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Ticker</TableCell>
-              <TableCell align="right">Shares</TableCell>
-              <TableCell align="right">Purchase Price</TableCell>
-              <TableCell align="right">Current Price</TableCell>
-              <TableCell align="right">Total Value</TableCell>
-              <TableCell align="right">Gain/Loss</TableCell>
+              <TableCell sortDirection={sortKey === 'ticker' ? sortDir : false}>
+                <TableSortLabel {...col('ticker')}>Ticker</TableSortLabel>
+              </TableCell>
+              <TableCell align="right" sortDirection={sortKey === 'shares' ? sortDir : false}>
+                <TableSortLabel {...col('shares')}>Shares</TableSortLabel>
+              </TableCell>
+              <TableCell align="right" sortDirection={sortKey === 'purchasePrice' ? sortDir : false}>
+                <TableSortLabel {...col('purchasePrice')}>Purchase Price</TableSortLabel>
+              </TableCell>
+              <TableCell align="right" sortDirection={sortKey === 'currentPrice' ? sortDir : false}>
+                <TableSortLabel {...col('currentPrice')}>Current Price</TableSortLabel>
+              </TableCell>
+              <TableCell align="right" sortDirection={sortKey === 'totalValue' ? sortDir : false}>
+                <TableSortLabel {...col('totalValue')}>Total Value</TableSortLabel>
+              </TableCell>
+              <TableCell align="right" sortDirection={sortKey === 'gainLossPercentage' ? sortDir : false}>
+                <TableSortLabel {...col('gainLossPercentage')}>Gain/Loss</TableSortLabel>
+              </TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {positions.map((position) => {
+            {sorted.map((position) => {
               const gainLossPercentage = position.gainLossPercentage || 0;
               const textColor = getTextColorByPercentage(gainLossPercentage);
               const bgColor = getBackgroundColorByPercentage(gainLossPercentage);
-              
+
               return (
-                <TableRow 
+                <TableRow
                   key={position.ticker}
-                  sx={{
-                    '&:hover': {
-                      bgcolor: 'action.hover',
-                    },
-                  }}
+                  sx={{ '&:hover': { bgcolor: 'action.hover' } }}
                 >
-                  <TableCell 
-                    sx={{ 
-                      fontWeight: 'bold',
-                      color: textColor
-                    }}
-                  >
+                  <TableCell sx={{ fontWeight: 'bold', color: textColor }}>
                     {position.ticker}
                   </TableCell>
                   <TableCell align="right">
                     {position.shares.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
                   <TableCell align="right">{formatCurrency(position.purchasePrice)}</TableCell>
-                  <TableCell 
+                  <TableCell
                     align="right"
                     sx={{
                       color: textColor,
@@ -121,13 +171,7 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
                   >
                     {formatCurrency(position.currentPrice || position.purchasePrice)}
                   </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{
-                      fontWeight: 'bold',
-                      color: textColor,
-                    }}
-                  >
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: textColor }}>
                     {formatCurrency(position.totalValue || (position.shares * position.purchasePrice))}
                   </TableCell>
                   <TableCell
@@ -143,14 +187,10 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
                     {formatPercentage(gainLossPercentage)}
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => onRemove(position.ticker)}
-                      sx={{
-                        '&:hover': {
-                          color: 'error.main',
-                        },
-                      }}
+                      sx={{ '&:hover': { color: 'error.main' } }}
                     >
                       <DeleteIcon />
                     </IconButton>
@@ -165,4 +205,4 @@ const StockList = ({ positions, onRemove, loading = false }: StockListProps) => 
   );
 };
 
-export default StockList; 
+export default StockList;
