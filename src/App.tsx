@@ -4,7 +4,7 @@ import { StockPosition } from './types/stock';
 import StockForm from './components/StockForm';
 import StockList from './components/StockList';
 import PortfolioChart from './components/PortfolioChart';
-import { updatePositionPrices, getRemainingCalls, getMinutesUntilReset } from './services/stockService';
+import { fetchStockPrice, getRemainingCalls, getMinutesUntilReset } from './services/stockService';
 import { ThemeProvider } from './context/ThemeContext';
 import { parsePortfolioCSV } from './utils/csvParser';
 import PortfolioCloud from './components/PortfolioCloud';
@@ -29,7 +29,6 @@ const AppContent = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
   const [pendingPositions, setPendingPositions] = useState<{ known: StockPosition[]; unknown: StockPosition[] }>({ known: [], unknown: [] });
-  const shouldUpdate = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const theme = createTheme({
@@ -100,44 +99,36 @@ const AppContent = () => {
     localStorage.setItem(POSITIONS_KEY, JSON.stringify(positions));
   }, [positions]);
 
-  useEffect(() => {
-    const updatePrices = async () => {
-      if (positions.length === 0 || !shouldUpdate.current) return;
-
-      const remaining = getRemainingCalls();
-      if (remaining === 0) {
-        const minutes = getMinutesUntilReset();
-        setErrorMsg(`API rate limit reached (5/hour). Showing cached prices. Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
-        return;
-      }
-
-      try {
-        shouldUpdate.current = false;
-        setLoading(true);
-        const updatedPositions = await updatePositionPrices(positions);
-        setPositions(updatedPositions);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : 'Failed to update prices.';
-        setErrorMsg(msg);
-      } finally {
-        setLoading(false);
-        setTimeout(() => {
-          shouldUpdate.current = true;
-        }, 5 * 60 * 1000);
-      }
-    };
-
-    updatePrices();
-  }, [positions.length]);
-
-  const addPosition = (newPosition: StockPosition) => {
+  const addPosition = async (newPosition: StockPosition) => {
     const duplicate = positions.some(p => p.ticker === newPosition.ticker);
     if (duplicate) {
       setErrorMsg(`${newPosition.ticker} is already in your portfolio.`);
       return;
     }
-    shouldUpdate.current = true;
-    setPositions(prev => [...prev, newPosition]);
+
+    const remaining = getRemainingCalls();
+    if (remaining === 0) {
+      const minutes = getMinutesUntilReset();
+      setErrorMsg(`API rate limit reached (5/hour). Added ${newPosition.ticker} at purchase price. Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
+      setPositions(prev => [...prev, newPosition]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const currentPrice = await fetchStockPrice(newPosition.ticker);
+      const totalValue = newPosition.shares * currentPrice;
+      const costBasis = newPosition.shares * newPosition.purchasePrice;
+      const gainLoss = totalValue - costBasis;
+      const gainLossPercentage = (gainLoss / costBasis) * 100;
+      setPositions(prev => [...prev, { ...newPosition, currentPrice, totalValue, gainLoss, gainLossPercentage }]);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : `Failed to fetch price for ${newPosition.ticker}.`;
+      setErrorMsg(msg);
+      setPositions(prev => [...prev, newPosition]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const removePosition = (ticker: string) => {
@@ -183,7 +174,6 @@ const AppContent = () => {
           }
         } else {
           // All recognized — add directly
-          shouldUpdate.current = false;
           const allSkipped = [...skipped, ...dupes];
           let msg = `Imported ${newOnes.length} position${newOnes.length !== 1 ? 's' : ''}.`;
           if (allSkipped.length > 0) msg += ` Skipped: ${allSkipped.join(', ')}.`;
@@ -203,7 +193,6 @@ const AppContent = () => {
   const handleSectorConfirm = (assignedUnknown: StockPosition[]) => {
     setSectorDialogOpen(false);
     const toAdd = [...pendingPositions.known, ...assignedUnknown];
-    shouldUpdate.current = false;
     setPositions(prev => [...prev, ...toAdd]);
     setSuccessMsg(`Imported ${toAdd.length} position${toAdd.length !== 1 ? 's' : ''}.`);
     setPendingPositions({ known: [], unknown: [] });
@@ -212,7 +201,6 @@ const AppContent = () => {
   const handleSectorCancel = () => {
     // Add known positions even if user cancels unknown sector assignment
     if (pendingPositions.known.length > 0) {
-      shouldUpdate.current = false;
       setPositions(prev => [...prev, ...pendingPositions.known]);
       setSuccessMsg(`Imported ${pendingPositions.known.length} position${pendingPositions.known.length !== 1 ? 's' : ''}. Unrecognized tickers were skipped.`);
     }
