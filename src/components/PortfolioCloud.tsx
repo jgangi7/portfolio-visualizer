@@ -50,6 +50,7 @@ const StockSphere = ({
         onHover(null);
         document.body.style.cursor = 'default';
       }}
+      onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(ticker)}+stock`, '_blank', 'noopener,noreferrer')}
     >
       <sphereGeometry args={[radius, 32, 32]} />
       <meshStandardMaterial
