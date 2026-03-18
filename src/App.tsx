@@ -11,20 +11,6 @@ import { parsePortfolioCSV } from './utils/csvParser';
 
 const POSITIONS_KEY = 'portfolio_positions';
 
-const TEST_POSITIONS: StockPosition[] = [
-  { ticker: 'AAPL',  shares: 50,  purchasePrice: 150.00, currentPrice: 211.42, totalValue: 10571.00, gainLoss: 3071.00,  gainLossPercentage: 40.95  },
-  { ticker: 'MSFT',  shares: 30,  purchasePrice: 280.00, currentPrice: 415.30, totalValue: 12459.00, gainLoss: 4059.00,  gainLossPercentage: 48.32  },
-  { ticker: 'NVDA',  shares: 20,  purchasePrice: 500.00, currentPrice: 875.40, totalValue: 17508.00, gainLoss: 7508.00,  gainLossPercentage: 75.08  },
-  { ticker: 'GOOGL', shares: 15,  purchasePrice: 140.00, currentPrice: 168.72, totalValue: 2530.80,  gainLoss: 430.80,   gainLossPercentage: 20.51  },
-  { ticker: 'AMZN',  shares: 25,  purchasePrice: 185.00, currentPrice: 176.50, totalValue: 4412.50,  gainLoss: -212.50,  gainLossPercentage: -4.59  },
-  { ticker: 'META',  shares: 10,  purchasePrice: 320.00, currentPrice: 511.90, totalValue: 5119.00,  gainLoss: 1919.00,  gainLossPercentage: 59.97  },
-  { ticker: 'TSLA',  shares: 40,  purchasePrice: 250.00, currentPrice: 178.20, totalValue: 7128.00,  gainLoss: -2872.00, gainLossPercentage: -28.72 },
-  { ticker: 'JPM',   shares: 35,  purchasePrice: 195.00, currentPrice: 208.40, totalValue: 7294.00,  gainLoss: 469.00,   gainLossPercentage: 6.87   },
-  { ticker: 'BAC',   shares: 100, purchasePrice: 38.00,  currentPrice: 32.10,  totalValue: 3210.00,  gainLoss: -590.00,  gainLossPercentage: -15.53 },
-  { ticker: 'XOM',   shares: 45,  purchasePrice: 110.00, currentPrice: 114.80, totalValue: 5166.00,  gainLoss: 216.00,   gainLossPercentage: 4.36   },
-  { ticker: 'WMT',   shares: 20,  purchasePrice: 60.00,  currentPrice: 97.30,  totalValue: 1946.00,  gainLoss: 746.00,   gainLossPercentage: 62.17  },
-  { ticker: 'INTC',  shares: 80,  purchasePrice: 45.00,  currentPrice: 22.40,  totalValue: 1792.00,  gainLoss: -1808.00, gainLossPercentage: -50.22 },
-];
 
 const AppContent = () => {
   const { isDarkMode } = useThemeContext();
@@ -154,11 +140,6 @@ const AppContent = () => {
     setPositions(prev => prev.filter(p => p.ticker !== ticker));
   };
 
-  const loadTestData = () => {
-    shouldUpdate.current = false; // skip API calls — data is already populated
-    setPositions(TEST_POSITIONS);
-  };
-
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -280,7 +261,7 @@ const AppContent = () => {
               }}
             >
               <Box sx={{ px: { xs: 1, sm: 2 } }}>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
                   <Tooltip title="Import a CSV/TSV portfolio export (Fidelity format supported)">
                     <Button
                       size="small"
@@ -290,14 +271,6 @@ const AppContent = () => {
                       Import CSV
                     </Button>
                   </Tooltip>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="secondary"
-                    onClick={loadTestData}
-                  >
-                    Load Test Data
-                  </Button>
                 </Box>
                 <StockForm onSubmit={addPosition} />
                 <Box 
